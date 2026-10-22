@@ -39,3 +39,9 @@ Formatting rules:
 - USD values shown in m always use 1 decimal place (e.g. USD 886.8m).
 
 Formatting rule: USD billions use two decimals unless the decimals are .00 (e.g. USD 12bn); USD millions use one decimal unless it is .0 (e.g. USD 5m).
+
+## UF support
+
+The app also recognizes Chile's Unidad de Fomento in either order, for example `UF 500,000` or `500,000 UF`. It fetches the official daily UF value from the Banco Central de Chile homepage through the app's `/api/uf` serverless endpoint, converts UF to CLP, then converts CLP to USD using the same currency API used elsewhere in the app.
+
+Example output: `UF 500,000, or CLP 20.6bn (USD 21.1m at today's exchange rate)`.
