@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>REDD Currency Converter</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090909;
+      --panel: #0f0f0f;
+      --panel-2: #141414;
+      --border: #333;
+      --text: #f5f5f5;
+      --muted: #a9a9a9;
+      --input: #eef0f4;
+      --input-text: #0c0c0c;
+      --accent: #c9202b;
+      --green: #16c784;
+      --green-bg: #0d2a20;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.4;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 44px; }
+    header { display:flex; gap:16px; justify-content:space-between; align-items:flex-start; margin-bottom: 20px; }
+    h1 { font-size: 24px; margin: 0 0 6px; }
+    .sub { color: var(--muted); font-size: 14px; margin:0; }
+    .panel { border: 1px solid var(--border); border-radius: 8px; padding: 18px; background: var(--panel); margin-top: 16px; }
+    label { display:block; font-weight:700; margin-bottom:8px; font-size: 14px; }
+    button {
+      background:#fff; color:#111; border:1px solid #ccc; border-radius:7px; padding:10px 14px; cursor:pointer; font-weight:600;
+    }
+    button:hover { filter: brightness(.94); }
+    .secondary { background: transparent; color:var(--text); border-color:var(--border); }
+    .primary { width:100%; margin-top:16px; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; align-items:center; }
+    .toolbar button { padding:6px 10px; min-width:36px; background:var(--input); color:#111; }
+    .spacer { flex:1; }
+    .editor {
+      min-height: 210px;
+      background:var(--input); color:var(--input-text); border:1px solid #bfc3ca; border-radius:6px; padding:12px;
+      overflow:auto; white-space:pre-wrap;
+    }
+    .editor:empty:before { content: attr(data-placeholder); color:#6c727d; }
+    .output { min-height: 170px; }
+    .status { color:var(--green); margin:18px 0 8px; font-size:14px; }
+    .rates-box { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+    .rates-list { flex:1; min-width:360px; }
+    .rates-scroll { max-height:360px; overflow:auto; border:1px solid #295a47; border-radius:6px; }
+    .rates-scroll table { width:100%; min-width:0; }
+    .rate-search { width:100%; margin:8px 0; padding:9px 10px; border-radius:6px; border:1px solid #bfc3ca; background:var(--input); color:var(--input-text); font:inherit; }
+    table { border-collapse: collapse; min-width: 330px; }
+    th, td { border:1px solid #295a47; padding:7px 10px; text-align:left; }
+    th { background: #159447; color:#fff; }
+    td { background:var(--green-bg); }
+    .rate-value { font-variant-numeric: tabular-nums; }
+    .tiny { color:var(--muted); font-size:12px; max-width:520px; }
+    .manual { flex:1; min-width:320px; }
+    textarea {
+      width:100%; min-height:110px; resize:vertical; padding:10px; border-radius:6px; border:1px solid #bfc3ca;
+      background:var(--input); color:var(--input-text); font:inherit;
+    }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .row label { margin:0; font-weight:400; }
+    .checkbox { display:flex; gap:7px; align-items:center; color:var(--muted); font-size:13px; }
+    .output-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:20px; }
+    .output-head label { margin:0; }
+    .source-link { color:#9cc7ff; text-decoration:none; }
+    .warning { color:#ffcf66; }
+    @media (max-width: 700px) {
+      .wrap { padding:18px 12px 30px; }
+      table { min-width:100%; }
+      .manual { min-width:100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>REDD Currency Converter</h1>
+        <p class="sub">Convert currency amounts in rich text to USD equivalents while preserving formatting.</p>
+      </div>
+      <button id="reloadRates" class="secondary">Refresh rates</button>
+    </header>
+
+    <section class="panel">
+      <div class="rates-box">
+        <div class="rates-list">
+          <label>Today's exchange rates</label>
+          <input id="rateSearch" class="rate-search" type="search" placeholder="Search currency code or name (e.g., BRL, peso, euro)…">
+          <div class="rates-scroll">
+            <table>
+              <thead><tr><th>Currency</th><th>Name</th><th>USD rate</th></tr></thead>
+              <tbody id="ratesBody"></tbody>
+            </table>
+          </div>
+          <p class="tiny" id="rateMeta">Loading all currencies available from the same public API used by REDD…</p>
+          <p class="tiny" id="ufMeta">Loading UF from Banco Central de Chile…</p>
+        </div>
+        <div class="manual">
+          <label for="manualRates">Manual overrides (optional)</label>
+          <textarea id="manualRates" spellcheck="false" placeholder="1 HKD = USD 0.12\n1 EUR = USD 1.16"></textarea>
+          <p class="tiny">Use one rate per line. Manual rates override the API. Other ISO 4217 codes found in your text are fetched automatically.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+        <label style="margin:0">Text with Currencies (Paste or edit rich text)</label>
+        <button id="clearBtn" class="secondary">Clear</button>
+      </div>
+      <div class="toolbar" aria-label="Formatting toolbar">
+        <button data-cmd="bold"><b>B</b></button>
+        <button data-cmd="italic"><i>I</i></button>
+        <button data-cmd="underline"><u>U</u></button>
+        <button data-cmd="insertUnorderedList">• List</button>
+        <button data-cmd="insertOrderedList">1. List</button>
+        <button id="linkBtn">Link</button>
+        <div class="spacer"></div>
+        <label class="checkbox"><input type="checkbox" id="phraseToggle" checked> Add “at today's exchange rate” to first conversion</label>
+      </div>
+      <div id="inputEditor" class="editor" contenteditable="true" data-placeholder="Paste or type your story text here…"></div>
+      <button id="convertBtn" class="primary">Convert Currencies</button>
+      <div id="status" class="status"></div>
+
+      <div class="output-head">
+        <label>Converted Text (Rich format)</label>
+        <div class="row">
+          <button id="copyRich" class="secondary">Copy as rich text</button>
+          <button id="copyHtml" class="secondary">Copy as HTML</button>
+        </div>
+      </div>
+      <div id="outputEditor" class="editor output" contenteditable="true" data-placeholder="Converted text will appear here…"></div>
+    </section>
+  </div>
+
+<script>
+(() => {
+  const API_BASE = 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api';
+  const rates = new Map();
+  const currencyNames = new Map();
+  let availableCodes = [];
+  let sourceDate = '';
+  let ufInfo = null;
+  const ratesBody = document.getElementById('ratesBody');
+  const rateMeta = document.getElementById('rateMeta');
+  const ufMeta = document.getElementById('ufMeta');
+  const manualRates = document.getElementById('manualRates');
+  const rateSearch = document.getElementById('rateSearch');
+  const inputEditor = document.getElementById('inputEditor');
+  const outputEditor = document.getElementById('outputEditor');
+  const status = document.getElementById('status');
+
+  function localISODate(offsetDays = 0) {
+    const d = new Date();
+    d.setHours(12,0,0,0);
+    d.setDate(d.getDate() - offsetDays);
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+
+  async function fetchRate(code) {
+    code = code.toUpperCase();
+    if (code === 'USD') return { rate: 1, date: localISODate(0), code };
+    for (let i=0; i<7; i++) {
+      const date = localISODate(i);
+      const lower = code.toLowerCase();
+      const url = `${API_BASE}@${date}/v1/currencies/${lower}.json`;
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (!r.ok) continue;
+        const data = await r.json();
+        const rate = data?.[lower]?.usd;
+        if (typeof rate === 'number' && Number.isFinite(rate)) {
+          return { rate, date: data.date || date, code };
+        }
+      } catch (_) {}
+    }
+    throw new Error(`No USD rate found for ${code}`);
+  }
+
+  async function ensureRate(code) {
+    const upper = code.toUpperCase();
+    const manual = parseManualRates();
+    if (manual.has(upper)) return { rate: manual.get(upper), date: 'manual', code: upper };
+    const cached = rates.get(upper);
+    if (cached && !cached.derived) return cached;
+    const info = await fetchRate(upper);
+    rates.set(upper, info);
+    renderRates(rateSearch.value);
+    return info;
+  }
+
+  function renderRates(filter = '') {
+    const q = filter.trim().toLowerCase();
+    ratesBody.innerHTML = '';
+    const codes = availableCodes.filter(code => {
+      const name = currencyNames.get(code) || '';
+      return !q || code.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+    });
+
+    for (const code of codes) {
+      const tr = document.createElement('tr');
+      const info = rates.get(code);
+      const name = currencyNames.get(code) || '';
+      tr.innerHTML = `<td>${code}</td><td>${name}</td><td class="rate-value">${info ? trimRate(info.rate) : '—'}</td>`;
+      ratesBody.appendChild(tr);
+    }
+  }
+
+  function trimRate(n) {
+    if (!Number.isFinite(Number(n))) return '—';
+    return Number(n).toFixed(9).replace(/0+$/,'').replace(/\.$/,'');
+  }
+
+  async function fetchCatalogAndRates() {
+    for (let i = 0; i < 7; i++) {
+      const date = localISODate(i);
+      const listUrl = `${API_BASE}@${date}/v1/currencies.json`;
+      const usdUrl = `${API_BASE}@${date}/v1/currencies/usd.json`;
+      try {
+        const [listResp, usdResp] = await Promise.all([
+          fetch(listUrl, { cache: 'no-store' }),
+          fetch(usdUrl, { cache: 'no-store' })
+        ]);
+        if (!listResp.ok || !usdResp.ok) continue;
+
+        const listData = await listResp.json();
+        const usdData = await usdResp.json();
+        const usdMap = usdData?.usd;
+        if (!usdMap || typeof usdMap !== 'object') continue;
+
+        currencyNames.clear();
+        availableCodes = Object.keys(listData)
+          .filter(k => /^[a-z]{3}$/i.test(k))
+          .map(k => k.toUpperCase())
+          .sort();
+
+        for (const code of availableCodes) {
+          const lower = code.toLowerCase();
+          currencyNames.set(code, String(listData[lower] || ''));
+          if (code === 'USD') {
+            rates.set(code, { rate: 1, date: usdData.date || date, code, derived: false });
+            continue;
+          }
+          const unitsPerUsd = usdMap[lower];
+          if (typeof unitsPerUsd === 'number' && Number.isFinite(unitsPerUsd) && unitsPerUsd !== 0) {
+            rates.set(code, { rate: 1 / unitsPerUsd, date: usdData.date || date, code, derived: true });
+          }
+        }
+        sourceDate = usdData.date || date;
+        return;
+      } catch (_) {}
+    }
+    throw new Error('Could not load the currency catalog/rates');
+  }
+
+  async function loadUF() {
+    ufMeta.textContent = 'Loading UF from Banco Central de Chile…';
+    try {
+      const r = await fetch('/api/uf', { cache: 'no-store' });
+      if (!r.ok) throw new Error(`UF endpoint returned HTTP ${r.status}`);
+      const data = await r.json();
+      if (!Number.isFinite(Number(data.ufClp))) throw new Error('Invalid UF value');
+      ufInfo = { clp: Number(data.ufClp), date: data.date || '', source: data.source || 'https://www.bcentral.cl/en/inicio' };
+      const dateText = ufInfo.date ? ` · Source date: <b>${ufInfo.date}</b>` : '';
+      ufMeta.innerHTML = `UF: <b>CLP ${ufInfo.clp.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</b>${dateText} · Source: <a class="source-link" href="${ufInfo.source}" target="_blank" rel="noopener">Banco Central de Chile</a>.`;
+    } catch (e) {
+      ufInfo = null;
+      ufMeta.innerHTML = `<span class="warning">UF could not be loaded from Banco Central de Chile.</span>`;
+    }
+  }
+
+  async function loadDefaultRates() {
+    rateMeta.textContent = 'Loading all currencies available from the same public API used by REDD…';
+    rates.clear();
+    availableCodes = [];
+    renderRates();
+    try {
+      await fetchCatalogAndRates();
+      renderRates(rateSearch.value);
+      rateMeta.innerHTML = `${availableCodes.length} three-letter currency codes loaded. Source date: <b>${sourceDate}</b>. Source: <a class="source-link" href="https://github.com/fawazahmed0/exchange-api" target="_blank" rel="noopener">currency-api</a> via jsDelivr.`;
+    } catch (e) {
+      rateMeta.innerHTML = `<span class="warning">Rates could not be loaded automatically.</span> Manual overrides remain available.`;
+    }
+  }
+
+  function parseManualRates() {
+    const out = new Map();
+    const lines = manualRates.value.split(/\r?\n/);
+    for (const line of lines) {
+      const m = line.match(/^\s*1\s+([A-Z]{3})\s*=\s*USD\s+([0-9]*\.?[0-9]+)\s*$/i);
+      if (m) out.set(m[1].toUpperCase(), Number(m[2]));
+    }
+    return out;
+  }
+
+  function normalizeNumber(raw) {
+    let s = raw.trim();
+    let neg = false;
+    if (s.startsWith('(') && s.endsWith(')')) { neg = true; s = s.slice(1,-1); }
+    s = s.replace(/\s/g,'');
+    if (s.includes(',') && s.includes('.')) {
+      // English financial style: commas as thousands separators, dot as decimal.
+      s = s.replace(/,/g,'');
+    } else if (s.includes(',')) {
+      const parts = s.split(',');
+      if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) s = s.replace(/,/g,'');
+      else s = s.replace(',','.');
+    }
+    const n = Number(s);
+    return neg ? -n : n;
+  }
+
+  function unitMultiplier(unit) {
+    if (!unit) return 1;
+    const u = unit.toLowerCase();
+    if (u === 'tn' || u === 'trillion') return 1e12;
+    if (u === 'bn' || u === 'billion') return 1e9;
+    if (u === 'm' || u === 'mn' || u === 'million') return 1e6;
+    if (u === 'k' || u === 'thousand') return 1e3;
+    return 1;
+  }
+
+  function rounded(n, decimals = 2, fixed = false) {
+    const factor = 10 ** decimals;
+    const x = Math.round((n + Number.EPSILON) * factor) / factor;
+    return x.toLocaleString('en-US', {
+      maximumFractionDigits: decimals,
+      minimumFractionDigits: fixed ? decimals : 0
+    });
+  }
+
+  function formatUSD(value) {
+    const abs = Math.abs(value);
+    const sign = value < 0 ? '-' : '';
+    if (abs >= 1e12) return `${sign}${rounded(abs/1e12)}tn`;
+    // REDD style: bn uses 2 decimal places and m uses 1, but suppress all-zero decimals.
+    if (abs >= 1e9) {
+      const n = rounded(abs/1e9, 2, true);
+      return `${sign}${n.endsWith('.00') ? n.slice(0, -3) : n}bn`;
+    }
+    if (abs >= 1e6) {
+      const n = rounded(abs/1e6, 1, true);
+      return `${sign}${n.endsWith('.0') ? n.slice(0, -2) : n}m`;
+    }
+    return `${sign}${abs.toLocaleString('en-US', { minimumFractionDigits: abs < 1000 ? 2 : 0, maximumFractionDigits: 2 })}`;
+  }
+
+  function formatCLP(value) {
+    const abs = Math.abs(value);
+    const sign = value < 0 ? '-' : '';
+    if (abs >= 1e12) {
+      const n = rounded(abs/1e12, 1, true);
+      return `${sign}${n.endsWith('.0') ? n.slice(0, -2) : n}tn`;
+    }
+    if (abs >= 1e9) {
+      const n = rounded(abs/1e9, 1, true);
+      return `${sign}${n.endsWith('.0') ? n.slice(0, -2) : n}bn`;
+    }
+    if (abs >= 1e6) {
+      const n = rounded(abs/1e6, 1, true);
+      return `${sign}${n.endsWith('.0') ? n.slice(0, -2) : n}m`;
+    }
+    return `${sign}${abs.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:2})}`;
+  }
+
+  // UF is a Chilean unit of account, not an ISO currency. Recognize both orders and the same scales as currencies.
+  // Examples: UF 500,000; 500,000 UF; UF 10m; 10m UF; UF 9.4bn; 9.4 billion UF.
+  const ufRegex = /(?:\bUF\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b|\b([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\s+UF\b)/g;
+
+  // Matches e.g. HKD 7.39bn, BRL 5 billion, COP 3,536 thousand, PEN 0.33.
+  const amountRegex = /\b([A-Z]{3})\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b/g;
+
+  function detectCodesFromText(text) {
+    const codes = new Set();
+    for (const m of text.matchAll(amountRegex)) {
+      if (m[1] !== 'USD') codes.add(m[1]);
+    }
+    return [...codes];
+  }
+
+  async function convertHTML(html) {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const plainText = temp.innerText || temp.textContent || '';
+    const codes = detectCodesFromText(plainText);
+    const hasUF = /(?:\bUF\s+[\(\-]?[0-9]|[\(\-]?[0-9][0-9.,]*\)?(?:\s*(?:tn|trillion|bn|billion|mn|m|million|k|thousand))?\s+UF\b)/.test(plainText);
+    const missing = [];
+    for (const code of codes) {
+      try { await ensureRate(code); } catch (_) { missing.push(code); }
+    }
+    if (hasUF) {
+      try { await ensureRate('CLP'); } catch (_) { if (!missing.includes('CLP')) missing.push('CLP'); }
+      if (!ufInfo) await loadUF();
+    }
+
+    let firstConversion = true;
+    const addPhrase = document.getElementById('phraseToggle').checked;
+    const walker = document.createTreeWalker(temp, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+
+    const combinedRegex = /(?:\bUF\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b|\b([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\s+UF\b)|\b([A-Z]{3})\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b/g;
+
+    for (const node of nodes) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest('[data-usd-conversion="true"]')) continue;
+      const source = node.nodeValue;
+      if (!source || !combinedRegex.test(source)) { combinedRegex.lastIndex = 0; continue; }
+      combinedRegex.lastIndex = 0;
+
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      for (const match of source.matchAll(combinedRegex)) {
+        const full = match[0];
+        const start = match.index;
+        frag.appendChild(document.createTextNode(source.slice(last, start)));
+        frag.appendChild(document.createTextNode(full));
+
+        const ufRaw = match[1] || match[3];
+        const ufUnit = match[2] || match[4];
+        if (ufRaw) {
+          const ufAmount = normalizeNumber(ufRaw) * unitMultiplier(ufUnit);
+          const clpRate = rates.get('CLP');
+          if (ufInfo && clpRate && Number.isFinite(ufAmount)) {
+            const clp = ufAmount * ufInfo.clp;
+            const usd = clp * clpRate.rate;
+            const span = document.createElement('span');
+            span.dataset.usdConversion = 'true';
+            const phrase = addPhrase && firstConversion ? " at today's exchange rate" : '';
+            span.textContent = `, or CLP ${formatCLP(clp)} (USD ${formatUSD(usd)}${phrase})`;
+            frag.appendChild(span);
+            firstConversion = false;
+          }
+        } else {
+          const code = match[5];
+          const rawNum = match[6];
+          const unit = match[7];
+          if (code !== 'USD') {
+            const manual = parseManualRates();
+            const info = manual.has(code) ? {rate: manual.get(code), date:'manual'} : rates.get(code);
+            const amount = normalizeNumber(rawNum) * unitMultiplier(unit);
+            if (info && Number.isFinite(amount)) {
+              const usd = amount * info.rate;
+              const span = document.createElement('span');
+              span.dataset.usdConversion = 'true';
+              const phrase = addPhrase && firstConversion ? " at today's exchange rate" : '';
+              span.textContent = ` (USD ${formatUSD(usd)}${phrase})`;
+              frag.appendChild(span);
+              firstConversion = false;
+            }
+          }
+        }
+        last = start + full.length;
+      }
+      frag.appendChild(document.createTextNode(source.slice(last)));
+      node.replaceWith(frag);
+    }
+    return { html: temp.innerHTML, codes: hasUF ? [...codes, 'UF'] : codes, missing };
+  }
+
+  document.querySelectorAll('[data-cmd]').forEach(btn => {
+    btn.addEventListener('click', () => { inputEditor.focus(); document.execCommand(btn.dataset.cmd, false, null); });
+  });
+  document.getElementById('linkBtn').addEventListener('click', () => {
+    const url = prompt('Link URL:');
+    if (url) { inputEditor.focus(); document.execCommand('createLink', false, url); }
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    inputEditor.innerHTML = ''; outputEditor.innerHTML = ''; status.textContent = '';
+  });
+
+  document.getElementById('reloadRates').addEventListener('click', async () => {
+    await Promise.all([loadDefaultRates(), loadUF()]);
+  });
+
+  rateSearch.addEventListener('input', () => renderRates(rateSearch.value));
+
+  document.getElementById('convertBtn').addEventListener('click', async () => {
+    status.textContent = 'Fetching rates and converting…';
+    try {
+      const result = await convertHTML(inputEditor.innerHTML);
+      outputEditor.innerHTML = result.html;
+      if (result.missing.length) {
+        status.innerHTML = `<span class="warning">Converted available currencies. No rate found for: ${result.missing.join(', ')}.</span>`;
+      } else if (result.codes.length) {
+        status.textContent = `Converted: ${result.codes.join(', ')} to USD.`;
+      } else {
+        status.textContent = 'No supported currency amounts found in the text.';
+      }
+    } catch (e) {
+      status.innerHTML = `<span class="warning">Conversion error: ${e.message}</span>`;
+    }
+  });
+
+  document.getElementById('copyHtml').addEventListener('click', async () => {
+    await navigator.clipboard.writeText(outputEditor.innerHTML);
+    status.textContent = 'HTML copied.';
+  });
+
+  document.getElementById('copyRich').addEventListener('click', async () => {
+    const html = outputEditor.innerHTML;
+    const text = outputEditor.innerText;
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], {type:'text/html'}),
+          'text/plain': new Blob([text], {type:'text/plain'})
+        })
+      ]);
+      status.textContent = 'Rich text copied.';
+    } catch (_) {
+      await navigator.clipboard.writeText(text);
+      status.textContent = 'Plain text copied (browser blocked rich-text clipboard).';
+    }
+  });
+
+  inputEditor.addEventListener('paste', e => {
+    // Preserve rich HTML when available, but strip scripts/styles.
+    const html = e.clipboardData?.getData('text/html');
+    if (!html) return;
+    e.preventDefault();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('script,style,meta,link').forEach(el => el.remove());
+    document.execCommand('insertHTML', false, doc.body.innerHTML);
+  });
+
+  Promise.all([loadDefaultRates(), loadUF()]);
+})();
+</script>
+</body>
+</html>

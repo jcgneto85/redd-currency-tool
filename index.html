@@ -365,8 +365,8 @@
       return `${sign}${n.endsWith('.0') ? n.slice(0, -2) : n}tn`;
     }
     if (abs >= 1e9) {
-      const n = rounded(abs/1e9, 1, true);
-      return `${sign}${n.endsWith('.0') ? n.slice(0, -2) : n}bn`;
+      const n = rounded(abs/1e9, 2, true);
+      return `${sign}${n.endsWith('.00') ? n.slice(0, -3) : n}bn`;
     }
     if (abs >= 1e6) {
       const n = rounded(abs/1e6, 1, true);
