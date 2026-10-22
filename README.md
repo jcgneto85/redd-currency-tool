@@ -45,3 +45,6 @@ Formatting rule: USD billions use two decimals unless the decimals are .00 (e.g.
 The app also recognizes Chile's Unidad de Fomento in either order, for example `UF 500,000` or `500,000 UF`. It fetches the official daily UF value from the Banco Central de Chile official daily indicators/BDE series through the app's `/api/uf` serverless endpoint, converts UF to CLP, then converts CLP to USD using the same currency API used elsewhere in the app.
 
 Example output: `UF 500,000, or CLP 20.6bn (USD 21.1m at today's exchange rate)`.
+
+
+UF parsing supports the same scales as currencies in either order, including `UF 10m`, `10m UF`, `UF 9.4bn`, `UF 5 million`, `UF 500,000`, and equivalents.

@@ -375,8 +375,9 @@
     return `${sign}${abs.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:2})}`;
   }
 
-  // UF is a Chilean unit of account, not an ISO currency. Recognize both UF 500,000 and 500,000 UF.
-  const ufRegex = /(?:\bUF\s+([\(\-]?[0-9][0-9.,]*\)?)\b|\b([\(\-]?[0-9][0-9.,]*\)?)\s+UF\b)/g;
+  // UF is a Chilean unit of account, not an ISO currency. Recognize both orders and the same scales as currencies.
+  // Examples: UF 500,000; 500,000 UF; UF 10m; 10m UF; UF 9.4bn; 9.4 billion UF.
+  const ufRegex = /(?:\bUF\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b|\b([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\s+UF\b)/g;
 
   // Matches e.g. HKD 7.39bn, BRL 5 billion, COP 3,536 thousand, PEN 0.33.
   const amountRegex = /\b([A-Z]{3})\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b/g;
@@ -394,7 +395,7 @@
     temp.innerHTML = html;
     const plainText = temp.innerText || temp.textContent || '';
     const codes = detectCodesFromText(plainText);
-    const hasUF = /(?:\bUF\s+[\(\-]?[0-9]|[\(\-]?[0-9][0-9.,]*\)?\s+UF\b)/.test(plainText);
+    const hasUF = /(?:\bUF\s+[\(\-]?[0-9]|[\(\-]?[0-9][0-9.,]*\)?(?:\s*(?:tn|trillion|bn|billion|mn|m|million|k|thousand))?\s+UF\b)/.test(plainText);
     const missing = [];
     for (const code of codes) {
       try { await ensureRate(code); } catch (_) { missing.push(code); }
@@ -410,7 +411,7 @@
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
 
-    const combinedRegex = /(?:\bUF\s+([\(\-]?[0-9][0-9.,]*\)?)\b|\b([\(\-]?[0-9][0-9.,]*\)?)\s+UF\b)|\b([A-Z]{3})\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b/g;
+    const combinedRegex = /(?:\bUF\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b|\b([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\s+UF\b)|\b([A-Z]{3})\s+([\(\-]?[0-9][0-9.,]*\)?)(?:\s*(tn|trillion|bn|billion|mn|m|million|k|thousand))?\b/g;
 
     for (const node of nodes) {
       const parent = node.parentElement;
@@ -427,9 +428,10 @@
         frag.appendChild(document.createTextNode(source.slice(last, start)));
         frag.appendChild(document.createTextNode(full));
 
-        const ufRaw = match[1] || match[2];
+        const ufRaw = match[1] || match[3];
+        const ufUnit = match[2] || match[4];
         if (ufRaw) {
-          const ufAmount = normalizeNumber(ufRaw);
+          const ufAmount = normalizeNumber(ufRaw) * unitMultiplier(ufUnit);
           const clpRate = rates.get('CLP');
           if (ufInfo && clpRate && Number.isFinite(ufAmount)) {
             const clp = ufAmount * ufInfo.clp;
@@ -442,9 +444,9 @@
             firstConversion = false;
           }
         } else {
-          const code = match[3];
-          const rawNum = match[4];
-          const unit = match[5];
+          const code = match[5];
+          const rawNum = match[6];
+          const unit = match[7];
           if (code !== 'USD') {
             const manual = parseManualRates();
             const info = manual.has(code) ? {rate: manual.get(code), date:'manual'} : rates.get(code);
